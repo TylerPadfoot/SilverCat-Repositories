@@ -3,7 +3,11 @@ package com.google.gwt.sample.stockwatcher.client;
 import java.util.ArrayList;
 import java.util.Date;
 
+import com.google.gwt.user.client.rpc.AsyncCallback;
+import com.google.gwt.user.client.ui.Anchor;
+
 import com.google.gwt.core.client.EntryPoint;
+import com.google.gwt.core.client.GWT;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.dom.client.KeyCodes;
@@ -32,32 +36,79 @@ public class StockWatcher implements EntryPoint {
 	private Button addStockButton = new Button("Add");
 	private Label lastUpdatedLabel = new Label();
 	private ArrayList<String> stocks = new ArrayList<String>();
-	
+
+	private LoginInfo loginInfo = null;
+	private VerticalPanel loginPanel = new VerticalPanel();
+	private Label loginLabel = new Label("Please sign in to your Google Account to access the StockWatcher application.");
+	private Anchor signInLink = new Anchor("Sign In");
+	private Anchor signOutLink = new Anchor("Sign Out");
+
+	private final StockServiceAsync stockService = GWT.create(StockService.class);
 	/**
 	 * Entry point method.
 	 */
+
+
+
 	public void onModuleLoad() {
+		// Check login status using login service.
+		LoginServiceAsync loginService = GWT.create(LoginService.class);
+		loginService.login(GWT.getHostPageBaseURL(), new AsyncCallback<LoginInfo>() {
+			public void onFailure(Throwable error) {
+		        handleError(error);
+
+			}
+
+			public void onSuccess(LoginInfo result) {
+				loginInfo = result;
+				if(loginInfo.isLoggedIn()) {
+					loadStockWatcher();
+				} else {
+					loadLogin();
+				}
+			}
+		});
+	}
+
+	private void loadLogin() {
+		// Assemble login panel.
+		signInLink.setHref(loginInfo.getLoginUrl());
+		loginPanel.add(loginLabel);
+		loginPanel.add(signInLink);
+		RootPanel.get("stockList").add(loginPanel);
+	}
+
+
+	private void loadStockWatcher() {
+		// Set up sign out hyperlink.
+		signOutLink.setHref(loginInfo.getLogoutUrl());
+
 		// Create table for stock data.
 		stocksFlexTable.setText(0, 0, "Symbol");
 		stocksFlexTable.setText(0, 1, "Price");
 		stocksFlexTable.setText(0, 2, "Change");
 		stocksFlexTable.setText(0, 3, "Remove");
-		
+
 		stocksFlexTable.setCellPadding(6);
 		// Add styles to elements in the stock list table.
-	    stocksFlexTable.getRowFormatter().addStyleName(0, "watchListHeader");
-	    stocksFlexTable.addStyleName("watchList");
-	    stocksFlexTable.getCellFormatter().addStyleName(0, 1, "watchListNumericColumn");
-	    stocksFlexTable.getCellFormatter().addStyleName(0, 2, "watchListNumericColumn");
-	    stocksFlexTable.getCellFormatter().addStyleName(0, 3, "watchListRemoveColumn");
-	    
+		stocksFlexTable.getRowFormatter().addStyleName(0, "watchListHeader");
+		stocksFlexTable.addStyleName("watchList");
+		stocksFlexTable.getCellFormatter().addStyleName(0, 1, "watchListNumericColumn");
+		stocksFlexTable.getCellFormatter().addStyleName(0, 2, "watchListNumericColumn");
+		stocksFlexTable.getCellFormatter().addStyleName(0, 3, "watchListRemoveColumn");
+
+
+		loadStocks();
+
+
 		// Assemble Add Stock panel.
 		addPanel.add(newSymbolTextBox);
 		addPanel.add(addStockButton);
-	    addPanel.addStyleName("addPanel");
+		addPanel.addStyleName("addPanel");
 
 
 		// Assemble Main panel.
+		mainPanel.add(signOutLink);
 		mainPanel.add(stocksFlexTable);
 		mainPanel.add(addPanel);
 		mainPanel.add(lastUpdatedLabel);
@@ -74,10 +125,10 @@ public class StockWatcher implements EntryPoint {
 			public void run() {
 				refreshWatchList();
 			}
-			
+
 		};
 		refreshTimer.scheduleRepeating(REFRESH_INTERVAL);
-		
+
 
 		//Listener for Add Button
 		addStockButton.addClickHandler(new ClickHandler(){
@@ -101,77 +152,94 @@ public class StockWatcher implements EntryPoint {
 				}
 			}
 
-			
-		});
 
+		});
+	}
+
+	private void loadStocks() {
+		stockService.getStocks(new AsyncCallback<String[]>() {
+			public void onFailure(Throwable error) {
+		        handleError(error);
+
+			}
+			public void onSuccess(String[] symbols) {
+				displayStocks(symbols);
+			}
+		});
+	}
+
+	private void displayStocks(String[] symbols) {
+		for (String symbol : symbols) {
+			displayStock(symbol);
+		}
 	}
 
 	protected void refreshWatchList() {
 		final double MAX_PRICE = 100.0; // $100.00
-	    final double MAX_PRICE_CHANGE = 0.02; // +/- 2%
+		final double MAX_PRICE_CHANGE = 0.02; // +/- 2%
 
-	    StockPrice[] prices = new StockPrice[stocks.size()];
-	    for (int i = 0; i < stocks.size(); i++) {
-	      double price = Random.nextDouble() * MAX_PRICE;
-	      double change = price * MAX_PRICE_CHANGE
-	          * (Random.nextDouble() * 2.0 - 1.0);
+		StockPrice[] prices = new StockPrice[stocks.size()];
+		for (int i = 0; i < stocks.size(); i++) {
+			double price = Random.nextDouble() * MAX_PRICE;
+			double change = price * MAX_PRICE_CHANGE
+					* (Random.nextDouble() * 2.0 - 1.0);
 
-	      prices[i] = new StockPrice(stocks.get(i), price, change);
-	    }
+			prices[i] = new StockPrice(stocks.get(i), price, change);
+		}
 
-	    updateTable(prices);		
+		updateTable(prices);		
 	}
-	  /**
-	   * Update the Price and Change fields all the rows in the stock table.
-	   *
-	   * @param prices Stock data for all rows.
-	   */
-	  private void updateTable(StockPrice[] prices) {
-	    for (int i = 0; i < prices.length; i++) {
-	      updateTable(prices[i]);
-	    }
-	    // Display timestamp showing last refresh.
-	    lastUpdatedLabel.setText("Last update : "
-	        + DateTimeFormat.getMediumDateTimeFormat().format(new Date()));
+	/**
+	 * Update the Price and Change fields all the rows in the stock table.
+	 *
+	 * @param prices Stock data for all rows.
+	 */
+	private void updateTable(StockPrice[] prices) {
+		for (int i = 0; i < prices.length; i++) {
+			updateTable(prices[i]);
+		}
+		// Display timestamp showing last refresh.
+		lastUpdatedLabel.setText("Last update : "
+				+ DateTimeFormat.getMediumDateTimeFormat().format(new Date()));
 
-	  }
-	  
+	}
 
-	  /**
-	   * Update a single row in the stock table.
-	   *
-	   * @param price Stock data for a single row.
-	   */
-	  private void updateTable(StockPrice price) {
-	    // Make sure the stock is still in the stock table.
-	    if (!stocks.contains(price.getSymbol())) {
-	      return;
-	    }
 
-	    int row = stocks.indexOf(price.getSymbol()) + 1;
+	/**
+	 * Update a single row in the stock table.
+	 *
+	 * @param price Stock data for a single row.
+	 */
+	private void updateTable(StockPrice price) {
+		// Make sure the stock is still in the stock table.
+		if (!stocks.contains(price.getSymbol())) {
+			return;
+		}
 
-	    // Format the data in the Price and Change fields.
-	    String priceText = NumberFormat.getFormat("#,##0.00").format(
-	        price.getPrice());
-	    NumberFormat changeFormat = NumberFormat.getFormat("+#,##0.00;-#,##0.00");
-	    String changeText = changeFormat.format(price.getChange());
-	    String changePercentText = changeFormat.format(price.getChangePercent());
+		int row = stocks.indexOf(price.getSymbol()) + 1;
 
-	    // Populate the Price and Change fields with new data.
-	    stocksFlexTable.setText(row, 1, priceText);
-	    Label changeWidget = (Label)stocksFlexTable.getWidget(row, 2);
-	    changeWidget.setText(changeText + " (" + changePercentText + "%)");
-	 // Change the color of text in the Change field based on its value.
-	    String changeStyleName = "noChange";
-	    if (price.getChangePercent() < -0.1f) {
-	      changeStyleName = "negativeChange";
-	    }
-	    else if (price.getChangePercent() > 0.1f) {
-	      changeStyleName = "positiveChange";
-	    }
+		// Format the data in the Price and Change fields.
+		String priceText = NumberFormat.getFormat("#,##0.00").format(
+				price.getPrice());
+		NumberFormat changeFormat = NumberFormat.getFormat("+#,##0.00;-#,##0.00");
+		String changeText = changeFormat.format(price.getChange());
+		String changePercentText = changeFormat.format(price.getChangePercent());
 
-	    changeWidget.setStyleName(changeStyleName);
-	  }
+		// Populate the Price and Change fields with new data.
+		stocksFlexTable.setText(row, 1, priceText);
+		Label changeWidget = (Label)stocksFlexTable.getWidget(row, 2);
+		changeWidget.setText(changeText + " (" + changePercentText + "%)");
+		// Change the color of text in the Change field based on its value.
+		String changeStyleName = "noChange";
+		if (price.getChangePercent() < -0.1f) {
+			changeStyleName = "negativeChange";
+		}
+		else if (price.getChangePercent() > 0.1f) {
+			changeStyleName = "positiveChange";
+		}
+
+		changeWidget.setStyleName(changeStyleName);
+	}
 
 	protected void addStock() {
 		final String symbol = newSymbolTextBox.getText().toUpperCase().trim();
@@ -189,14 +257,29 @@ public class StockWatcher implements EntryPoint {
 			return;
 		}
 		newSymbolTextBox.setText("");
-		
-	    // Don't add the stock if it's already in the table.
+
+		// Don't add the stock if it's already in the table.
 		if(stocks.contains(symbol)){
 			Window.alert("'"+symbol+"' is already in the table.");
 			newSymbolTextBox.selectAll();
 			return;
 		}
-	    // Add the stock to the table.
+		addStock(symbol);
+
+	}
+	private void addStock(final String symbol) {
+		stockService.addStock(symbol, new AsyncCallback<Void>() {
+			public void onFailure(Throwable error) {
+		        handleError(error);
+
+			}
+			public void onSuccess(Void ignore) {
+				displayStock(symbol);
+			}
+		});
+	}
+	private void displayStock(final String symbol) {
+		// Add the stock to the table.
 		int row = stocksFlexTable.getRowCount();
 		stocks.add(symbol);
 		stocksFlexTable.setText(row, 0, symbol);
@@ -204,24 +287,48 @@ public class StockWatcher implements EntryPoint {
 		stocksFlexTable.getCellFormatter().addStyleName(row, 1, "watchListNumericColumn");
 		stocksFlexTable.getCellFormatter().addStyleName(row, 2, "watchListNumericColumn");
 		stocksFlexTable.getCellFormatter().addStyleName(row, 3, "watchListRemoveColumn");
-		    
-	    // TODO Add a button to remove this stock from the table.
+
+		// TODO Add a button to remove this stock from the table.
 		Button removeButton = new Button("x");
-	    removeButton.addStyleDependentName("remove");
+		removeButton.addStyleDependentName("remove");
 		removeButton.addClickHandler(new ClickHandler(){
 
 			@Override
 			public void onClick(ClickEvent event) {
-				int removedIndex = stocks.indexOf(symbol);
-				stocks.remove(removedIndex);
-				stocksFlexTable.removeRow(removedIndex + 1);
+				removeStock(symbol);
 			}
+
 			
 		});
 		stocksFlexTable.setWidget(row, 3, removeButton);
-	    // Get the stock price.
+		// Get the stock price.
 		refreshWatchList();
-		
 	}
+	
+	private void removeStock(final String symbol) {
+		stockService.removeStock(symbol, new AsyncCallback<Void>() {
+			public void onFailure(Throwable error) {
+		        handleError(error);
+
+			}
+			public void onSuccess(Void ignore) {
+				undisplayStock(symbol);
+			}
+		});
+	}
+
+	  private void handleError(Throwable error) {
+		    Window.alert(error.getMessage());
+		    if (error instanceof NotLoggedInException) {
+		      Window.Location.replace(loginInfo.getLogoutUrl());
+		    }
+		  }
+
+	private void undisplayStock(final String symbol) {
+		int removedIndex = stocks.indexOf(symbol);
+		stocks.remove(removedIndex);
+		stocksFlexTable.removeRow(removedIndex + 1);
+	}
+
 
 }

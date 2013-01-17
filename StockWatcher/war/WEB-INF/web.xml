@@ -15,6 +15,18 @@
   <welcome-file-list>
     <welcome-file>StockWatcher.html</welcome-file>
   </welcome-file-list>
+  
+  <!-- Servlets -->
+  <servlet>
+    <servlet-name>loginService</servlet-name>
+    <servlet-class>com.google.gwt.sample.stockwatcher.server.LoginServiceImpl</servlet-class>
+  </servlet>
+
+  <servlet-mapping>
+    <servlet-name>loginService</servlet-name>
+    <url-pattern>/stockwatcher/login</url-pattern>
+  </servlet-mapping>
+
 
   <servlet>
     <servlet-name>SystemServiceServlet</servlet-name>
@@ -24,10 +36,21 @@
       <param-value/>
     </init-param>
   </servlet>
+  
+   <servlet>
+    <servlet-name>stockService</servlet-name>
+    <servlet-class>com.google.gwt.sample.stockwatcher.server.StockServiceImpl</servlet-class>
+  </servlet>
 
   <servlet-mapping>
     <servlet-name>SystemServiceServlet</servlet-name>
     <url-pattern>/_ah/spi/*</url-pattern>
   </servlet-mapping>
+  
+    <servlet-mapping>
+    <servlet-name>stockService</servlet-name>
+    <url-pattern>/stockwatcher/stock</url-pattern>
+  </servlet-mapping>
+  
 
 </web-app>
